@@ -5,7 +5,7 @@ st.write(
     "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
 )
 
-import streamlit as st
+#import streamlit as st
 import ee
 import geemap
 from datetime import date, datetime, time, timedelta
@@ -15,13 +15,23 @@ import os
 st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
 
+# Carrega o dicionário completo da chave
+credentials_info = st.secrets["earth_engine_key"]
+
+# Inicializa com as credenciais da Service Account
+credentials = ee.ServiceAccountCredentials(
+    credentials_info["client_email"], 
+    key_data=credentials_info["private_key"]
+)
+ee.Initialize(credentials, project="ee-passeionamatamapas")
+
 # Initialize Earth Engine
 # geemap.ee_initialize() is not suitable for Streamlit, use ee.Initialize()
-try:
-    ee.Initialize(project="ee-passeionamatamapas")
-except Exception as e:
-    ee.Authenticate()
-    ee.Initialize(project="ee-passeionamatamapas")
+#try:
+#    ee.Initialize(project="ee-passeionamatamapas")
+#except Exception as e:
+#    ee.Authenticate()
+#    ee.Initialize(project="ee-passeionamatamapas")
 
 # Define the region for South America
 region = ee.Geometry.BBox(-85.0, -56.0, -34.0, 13.0)
