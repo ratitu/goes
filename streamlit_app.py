@@ -91,7 +91,7 @@ if st.button('Generate Timelapse GIF'):
 if 'generated_gif_path' in st.session_state and os.path.exists(st.session_state['generated_gif_path']):
     st.divider()
     st.subheader('Generated Timelapse GIF')
-    st.image(st.session_state['generated_gif_path'], use_container_width=True)
+    st.image(st.session_state['generated_gif_path'], use_container_width=False)
 
     with open(st.session_state['generated_gif_path'], 'rb') as f:
         st.download_button(
