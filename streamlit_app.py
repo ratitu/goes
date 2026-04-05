@@ -18,8 +18,8 @@ st.title("GOES Fire Timelapse App")
 # Carrega o dicionário completo da chave
 #credentials_info = st.secrets["earth_engine_key"]
 
-service_account = st.secrets["earth_engine_key"]["service_account"]
-private_key = st.secrets["earth_engine_key"]["private_key"]
+service_account = st.secrets["ee"]["service_account"]
+private_key = st.secrets["ee"]["private_key"]
 
 credentials = ee.ServiceAccountCredentials(
     service_account,
