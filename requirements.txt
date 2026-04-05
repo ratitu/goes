@@ -1,3 +1,4 @@
 streamlit>=1.30.0
 earthengine-api>=0.1.390
 geemap>=0.30.0
+google-cloud-secret-manager
