@@ -16,7 +16,7 @@ st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
 
 # Carrega o dicionário completo da chave
-#credentials_info = st.secrets["earth_engine_key"]
+credentials_info = st.secrets["earth_engine_key"]
 
 service_account = st.secrets["ee"]["service_account"]
 private_key = st.secrets["ee"]["private_key"]
