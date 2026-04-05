@@ -11,6 +11,7 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
+import json
 
 st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
