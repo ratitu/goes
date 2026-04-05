@@ -15,18 +15,31 @@ import os
 st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
 
+@st.cache_resource
+def init_ee():
+    credentials_dict = dict(st.secrets["ee"])
+
+    credentials = ee.ServiceAccountCredentials(
+        credentials_dict["client_email"],
+        key_data=json.dumps(credentials_dict)
+    )
+
+    ee.Initialize(credentials, project="ee-passeionamatamapas")
+
+init_ee()
+
 # Carrega o dicionário completo da chave
-credentials_info = st.secrets["ee"]
+#credentials_info = st.secrets["ee"]
 
-service_account = st.secrets["ee"]["service_account"]
-private_key = st.secrets["ee"]["private_key"]
+#service_account = st.secrets["ee"]["service_account"]
+#private_key = st.secrets["ee"]["private_key"]
 
-credentials = ee.ServiceAccountCredentials(
-    service_account,
-    key_data=private_key
-)
+#credentials = ee.ServiceAccountCredentials(
+#    service_account,
+#    key_data=private_key
+#)
 
-ee.Initialize(credentials, project="ee-passeionamatamapas")
+#ee.Initialize(credentials, project="ee-passeionamatamapas")
 # Inicializa com as credenciais da Service Account
 #credentials = ee.ServiceAccountCredentials(
 #    credentials_info["client_email"], 
