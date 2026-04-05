@@ -16,14 +16,23 @@ st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
 
 # Carrega o dicionário completo da chave
-credentials_info = st.secrets["earth_engine_key"]
+#credentials_info = st.secrets["earth_engine_key"]
 
-# Inicializa com as credenciais da Service Account
+service_account = st.secrets["earth_engine_key"]["service_account"]
+private_key = st.secrets["earth_engine_key"]["private_key"]
+
 credentials = ee.ServiceAccountCredentials(
-    credentials_info["client_email"], 
-    key_data=credentials_info["private_key"]
+    service_account,
+    key_data=private_key
 )
+
 ee.Initialize(credentials, project="ee-passeionamatamapas")
+# Inicializa com as credenciais da Service Account
+#credentials = ee.ServiceAccountCredentials(
+#    credentials_info["client_email"], 
+#    key_data=credentials_info["private_key"]
+#)
+#ee.Initialize(credentials, project="ee-passeionamatamapas")
 
 # Initialize Earth Engine
 # geemap.ee_initialize() is not suitable for Streamlit, use ee.Initialize()
