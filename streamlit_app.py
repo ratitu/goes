@@ -16,6 +16,16 @@ import json
 st.set_page_config(layout="wide")
 st.title("GOES Fire Timelapse App")
 
+# Carrega o dicionário completo da chave
+credentials_info = st.secrets["ee"]
+
+# Inicializa com as credenciais da Service Account
+credentials = ee.ServiceAccountCredentials(
+    credentials_info["client_email"], 
+    key_data=credentials_info["private_key"]
+)
+ee.Initialize(credentials, project="ee-passeionamatamapas")
+
 #@st.cache_resource
 #def init_ee():
 #    credentials_dict = dict(st.secrets["ee"])
@@ -50,11 +60,11 @@ st.title("GOES Fire Timelapse App")
 
 # Initialize Earth Engine
 # geemap.ee_initialize() is not suitable for Streamlit, use ee.Initialize()
-try:
-    ee.Initialize(project="ee-passeionamatamapas")
-except Exception as e:
-    ee.Authenticate()
-    ee.Initialize(project="ee-passeionamatamapas")
+#try:
+#    ee.Initialize(project="ee-passeionamatamapas")
+#except Exception as e:
+#    ee.Authenticate()
+#    ee.Initialize(project="ee-passeionamatamapas")
 
 # Define the region for South America
 region = ee.Geometry.BBox(-85.0, -56.0, -34.0, 13.0)
