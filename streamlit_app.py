@@ -50,7 +50,7 @@ st.title("GOES Fire Timelapse App")
 
 # Initialize Earth Engine
 # geemap.ee_initialize() is not suitable for Streamlit, use ee.Initialize()
-#try:
+try:
     ee.Initialize(project="ee-passeionamatamapas")
 except Exception as e:
     ee.Authenticate()
