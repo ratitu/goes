@@ -1,130 +1,161 @@
 import streamlit as st
-
-st.title("🎈 My new Streamlit app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
-
-# import streamlit as st
 import ee
 import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
-import json
 
 st.set_page_config(layout="wide")
+
+GOES_16_START = date(2017, 12, 18)
+GOES_19_START = date(2025, 4, 8)
+
+REGION_PRESETS = {
+    "South America": (-85.0, -56.0, -34.0, 13.0),
+    "Continental US": (-130.0, 24.0, -65.0, 50.0),
+    "Full Disk": (-180.0, -90.0, 180.0, 90.0),
+}
+
+
+def init_ee():
+    credentials_info = st.secrets["ee"]
+    credentials = ee.ServiceAccountCredentials(
+        credentials_info["client_email"], key_data=credentials_info["private_key"]
+    )
+    ee.Initialize(credentials, project="ee-passeionamatamapas")
+
+
+@st.cache_resource
+def get_ee_initialized():
+    init_ee()
+    return True
+
+
+def get_goes_data(start_d: date) -> str:
+    return "GOES-16" if start_d < GOES_19_START else "GOES-19"
+
+
 st.title("GOES Fire Timelapse App")
 
-# Carrega o dicionário completo da chave
-credentials_info = st.secrets["ee"]
+get_ee_initialized()
 
-# Inicializa com as credenciais da Service Account
-credentials = ee.ServiceAccountCredentials(
-    credentials_info["client_email"], key_data=credentials_info["private_key"]
-)
-ee.Initialize(credentials, project="ee-passeionamatamapas")
+if "last_settings" not in st.session_state:
+    st.session_state.last_settings = {}
 
-# @st.cache_resource
-# def init_ee():
-#    credentials_dict = dict(st.secrets["ee"])
-
-#    credentials = ee.ServiceAccountCredentials(
-#        credentials_dict["client_email"],
-#        key_data=json.dumps(credentials_dict)
-#    )
-
-#    ee.Initialize(credentials, project="ee-passeionamatamapas")
-
-# init_ee()
-
-# Carrega o dicionário completo da chave
-# credentials_info = st.secrets["ee"]
-
-# service_account = st.secrets["ee"]["service_account"]
-# private_key = st.secrets["ee"]["private_key"]
-
-# credentials = ee.ServiceAccountCredentials(
-#    service_account,
-#    key_data=private_key
-# )
-
-# ee.Initialize(credentials, project="ee-passeionamatamapas")
-# Inicializa com as credenciais da Service Account
-# credentials = ee.ServiceAccountCredentials(
-#    credentials_info["client_email"],
-#    key_data=credentials_info["private_key"]
-# )
-# ee.Initialize(credentials, project="ee-passeionamatamapas")
-
-# Initialize Earth Engine
-# geemap.ee_initialize() is not suitable for Streamlit, use ee.Initialize()
-# try:
-#    ee.Initialize(project="ee-passeionamatamapas")
-# except Exception as e:
-#    ee.Authenticate()
-#    ee.Initialize(project="ee-passeionamatamapas")
-
-# Define the region for South America
-region = ee.Geometry.BBox(-85.0, -56.0, -34.0, 13.0)
-
-# --- Date and Time Selection ---
-st.subheader("1. Select Time Range")
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 3])
 
 with col1:
-    st.markdown("**Start Period**")
-    start_d = st.date_input("Start date", date.today() - timedelta(days=1))
-    start_t = st.time_input("Start time", time(0, 0))  # Defaults to midnight
+    st.subheader("1. Select Region")
+    preset = st.selectbox("Region Preset", list(REGION_PRESETS.keys()), index=0)
+    region_coords = REGION_PRESETS[preset]
+    region = ee.Geometry.BBox(*region_coords)
 
 with col2:
-    st.markdown("**End Period**")
-    end_d = st.date_input("End date", date.today())
-    end_t = st.time_input("End time", time(23, 59))  # Defaults to end of day
+    st.subheader("2. Select Time Range")
+    col_date, col_time = st.columns(2)
 
-# Combine date and time into the format geemap expects: 'YYYY-MM-DDTHH:mm'
-start_date_str = datetime.combine(start_d, start_t).strftime("%Y-%m-%dT%H:%M")
-end_date_str = datetime.combine(end_d, end_t).strftime("%Y-%m-%dT%H:%M")
+    with col_date:
+        default_start = st.session_state.last_settings.get(
+            "start_d", date.today() - timedelta(days=1)
+        )
+        start_d = st.date_input("Start date", default_start)
+        default_end = st.session_state.last_settings.get("end_d", date.today())
+        end_d = st.date_input("End date", default_end)
 
-# --- Generate Timelapse ---
+    with col_time:
+        default_start_t = st.session_state.last_settings.get("start_t", time(0, 0))
+        start_t = st.time_input("Start time", default_start_t)
+        default_end_t = st.session_state.last_settings.get("end_t", time(23, 59))
+        end_t = st.time_input("End time", default_end_t)
+
+st.subheader("3. Customize GIF")
+
+col_dim, col_fps, col_scan = st.columns(3)
+
+with col_dim:
+    dimensions = st.slider("Dimensions (px)", 300, 1200, 600, step=50)
+
+with col_fps:
+    frames_per_second = st.slider("Frames per Second", 1, 12, 6)
+
+with col_scan:
+    scan = st.selectbox("Scan Type", ["full_disk", "regional"], index=0)
+
 if st.button("Generate Timelapse GIF"):
-    if datetime.combine(start_d, start_t) >= datetime.combine(end_d, end_t):
-        st.error("Error: End time must be after start time.")
+    start_dt = datetime.combine(start_d, start_t)
+    end_dt = datetime.combine(end_d, end_t)
+    start_date_str = start_dt.strftime("%Y-%m-%dT%H:%M")
+    end_date_str = end_dt.strftime("%Y-%m-%dT%H:%M")
+
+    if start_dt >= end_dt:
+        st.error("End time must be after start time.")
+    elif start_d < GOES_16_START:
+        st.error(
+            f"GOES-16 data available from {GOES_16_START.strftime('%B %d, %Y')} onwards."
+        )
     else:
+        st.session_state.last_settings = {
+            "start_d": start_d,
+            "end_d": end_d,
+            "start_t": start_t,
+            "end_t": end_t,
+        }
+        st.session_state.start_date_str = start_date_str
+
+        goes_data = get_goes_data(start_d)
+        st.info(f"Using {goes_data} satellite data")
+
         with st.spinner(
             f"Generating timelapse from {start_date_str} to {end_date_str}..."
         ):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
             with tempfile.NamedTemporaryFile(
                 suffix=".gif", delete=False
             ) as tmp_gif_file:
                 output_gif_path = tmp_gif_file.name
 
             try:
-                goes_data = "GOES-16" if start_d < date(2025, 4, 8) else "GOES-19"
+                status_text.text("Processing satellite imagery...")
+                progress_bar.progress(25)
+
                 timelapse_result = geemap.goes_fire_timelapse(
                     roi=region,
                     out_gif=output_gif_path,
                     start_date=start_date_str,
                     end_date=end_date_str,
                     data=goes_data,
-                    scan="full_disk",
-                    dimensions=600,
-                    framesPerSecond=6,
+                    scan=scan,
+                    dimensions=dimensions,
+                    framesPerSecond=frames_per_second,
                     date_format="YYYY-MM-dd HH:mm",
                     add_progress_bar=False,
                     mp4=False,
                 )
 
+                progress_bar.progress(100)
+                status_text.text("Complete!")
+
                 st.session_state["generated_gif_path"] = output_gif_path
                 st.success("Timelapse generated!")
-                st.rerun()  # Updated from experimental_rerun()
+                st.rerun()
 
             except Exception as e:
-                st.error(f"Error generating timelapse: {e}")
+                progress_bar.empty()
+                status_text.empty()
+                error_msg = str(e)
+                if "quota" in error_msg.lower():
+                    st.error(
+                        "Earth Engine quota exceeded. Try a shorter time range or wait and try again."
+                    )
+                elif "invalid date" in error_msg.lower():
+                    st.error("Invalid date range. Please check the selected dates.")
+                else:
+                    st.error(f"Error generating timelapse: {error_msg}")
                 if os.path.exists(output_gif_path):
                     os.remove(output_gif_path)
 
-# --- Display Result ---
 if "generated_gif_path" in st.session_state and os.path.exists(
     st.session_state["generated_gif_path"]
 ):
@@ -132,10 +163,8 @@ if "generated_gif_path" in st.session_state and os.path.exists(
     st.subheader("Generated Timelapse GIF")
     st.image(st.session_state["generated_gif_path"], use_container_width=False)
 
+    filename = f"goes_fire_{st.session_state.get('start_date_str', 'output')}.gif"
     with open(st.session_state["generated_gif_path"], "rb") as f:
         st.download_button(
-            label="Download GIF",
-            data=f,
-            file_name=f"goes_fire_{start_date_str}.gif",
-            mime="image/gif",
+            label="Download GIF", data=f, file_name=filename, mime="image/gif"
         )

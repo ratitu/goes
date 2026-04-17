@@ -1,6 +1,6 @@
 # GOES Fire Timelapse App
 
-Single-file Streamlit app generating fire timelapse GIFs from GOES-19 satellite data via Google Earth Engine and geemap.
+Single-file Streamlit app generating fire timelapse GIFs from GOES satellite data via Google Earth Engine and geemap.
 
 ## Running
 
@@ -27,9 +27,15 @@ private_key = "..."
 
 Project name: `ee-passeionamatamapas`
 
-The app uses `ee.ServiceAccountCredentials()` directly (not `geemap.ee_initialize()` which is unsuitable for Streamlit).
+The app uses `ee.ServiceAccountCredentials()` directly (not `geemap.ee_initialize()` which is unsuitable for Streamlit). Initialization is cached via `@st.cache_resource`.
+
+## Satellite Data
+
+- GOES-16: Dec 18, 2017 to Apr 7, 2025
+- GOES-19: Apr 8, 2025 onwards
+
+App auto-selects the correct satellite based on start date.
 
 ## Known Issues
 
-- `start_date_str` is not persisted in session state, so the download filename may be wrong on rerun
 - `st.rerun()` before GIF file write completes can cause display issues
