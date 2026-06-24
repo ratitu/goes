@@ -120,6 +120,10 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
 
+                estados_brasil = ee.FeatureCollection(
+                    "projects/ee-pigee/assets/estados_brasil"
+                )
+
                 timelapse_result = geemap.goes_fire_timelapse(
                     roi=region,
                     out_gif=output_gif_path,
@@ -132,6 +136,10 @@ if st.button("Generate Timelapse GIF"):
                     date_format="YYYY-MM-dd HH:mm",
                     add_progress_bar=False,
                     mp4=False,
+                    overlay_data=estados_brasil,
+                    overlay_color="#FF0000",
+                    overlay_width=1,
+                    overlay_opacity=0.8,
                 )
 
                 progress_bar.progress(100)
