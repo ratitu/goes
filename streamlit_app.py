@@ -136,12 +136,11 @@ if st.button("Generate Timelapse GIF"):
                 estados_brasil = ee.FeatureCollection(
                     "projects/ee-pigee/assets/estados_brasil"
                 )
-                overlay = (
-                    ee.Image()
-                    .byte()
-                    .paint(featureCollection=estados_brasil, color=1, width=1)
-                    .visualize(palette=["FF0000"], opacity=0.8, crs=crs)
-                )
+                ref_band = col.first().select("vis-red")
+                base = ref_band.multiply(0).byte()
+                overlay = base.paint(
+                    featureCollection=estados_brasil, color=1, width=1
+                ).visualize(palette=["FF0000"], opacity=0.8)
 
                 col = col.map(
                     lambda img: img.blend(overlay).set(
