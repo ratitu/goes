@@ -4,6 +4,8 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
+import io
+import contextlib
 from PIL import Image
 
 st.set_page_config(layout="wide")
@@ -121,70 +123,34 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
 
-                col = geemap.goes_fire_timeseries(
-                    start_date=start_date_str,
-                    end_date=end_date_str,
-                    data=goes_data,
-                    scan=scan,
-                    region=region,
-                )
-
-                progress_bar.progress(50)
-
-                crs = col.first().projection()
-
                 estados_brasil = ee.FeatureCollection(
                     "projects/ee-pigee/assets/estados_brasil"
                 )
-                ref_band = col.first().select("vis-red")
-                base = ref_band.multiply(0).byte()
-                overlay = base.paint(
-                    featureCollection=estados_brasil, color=1, width=1
-                ).visualize(palette=["FF0000"], opacity=0.8)
 
-                col = col.map(
-                    lambda img: img.blend(overlay).set(
-                        "system:time_start", img.get("system:time_start")
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    geemap.goes_fire_timelapse(
+                        roi=region,
+                        out_gif=output_gif_path,
+                        start_date=start_date_str,
+                        end_date=end_date_str,
+                        data=goes_data,
+                        scan=scan,
+                        dimensions=dimensions,
+                        framesPerSecond=frames_per_second,
+                        date_format="YYYY-MM-dd HH:mm",
+                        add_progress_bar=False,
+                        mp4=False,
+                        overlay_data=estados_brasil,
+                        overlay_color="#FF0000",
+                        overlay_width=1,
+                        overlay_opacity=0.8,
                     )
-                )
-
-                vis_params = {
-                    "dimensions": dimensions,
-                    "framesPerSecond": frames_per_second,
-                    "region": region,
-                    "crs": crs,
-                }
-
-                text_sequence = geemap.image_dates(
-                    col, date_format="YYYY-MM-dd HH:mm"
-                ).getInfo()
-
-                progress_bar.progress(75)
-
-                geemap.download_ee_video(col, vis_params, output_gif_path)
+                    geemap_output = buf.getvalue()
 
                 if not os.path.exists(output_gif_path):
                     raise RuntimeError(
-                        "GIF download failed. Check the server logs for details."
+                        f"GIF download failed. EE output: {geemap_output}"
                     )
-
-                geemap.add_text_to_gif(
-                    output_gif_path,
-                    output_gif_path,
-                    ("3%", "3%"),
-                    text_sequence,
-                    "arial.ttf",
-                    20,
-                    "#ffffff",
-                    add_progress_bar=False,
-                    loop=0,
-                    duration=1000 / frames_per_second,
-                )
-
-                try:
-                    geemap.reduce_gif_size(output_gif_path)
-                except Exception:
-                    pass
 
                 with Image.open(output_gif_path) as validate_img:
                     validate_img.verify()
