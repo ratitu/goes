@@ -4,9 +4,6 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
-import io
-import contextlib
-from PIL import Image
 
 st.set_page_config(layout="wide")
 
@@ -123,37 +120,19 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
 
-                estados_brasil = ee.FeatureCollection(
-                    "projects/ee-pigee/assets/estados_brasil"
+                timelapse_result = geemap.goes_fire_timelapse(
+                    roi=region,
+                    out_gif=output_gif_path,
+                    start_date=start_date_str,
+                    end_date=end_date_str,
+                    data=goes_data,
+                    scan=scan,
+                    dimensions=dimensions,
+                    framesPerSecond=frames_per_second,
+                    date_format="YYYY-MM-dd HH:mm",
+                    add_progress_bar=False,
+                    mp4=False,
                 )
-
-                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                    geemap.goes_fire_timelapse(
-                        roi=region,
-                        out_gif=output_gif_path,
-                        start_date=start_date_str,
-                        end_date=end_date_str,
-                        data=goes_data,
-                        scan=scan,
-                        dimensions=dimensions,
-                        framesPerSecond=frames_per_second,
-                        date_format="YYYY-MM-dd HH:mm",
-                        add_progress_bar=False,
-                        mp4=False,
-                        overlay_data=estados_brasil,
-                        overlay_color="#FF0000",
-                        overlay_width=1,
-                        overlay_opacity=0.8,
-                    )
-                    geemap_output = buf.getvalue()
-
-                if not os.path.exists(output_gif_path):
-                    raise RuntimeError(
-                        f"GIF download failed. EE output: {geemap_output}"
-                    )
-
-                with Image.open(output_gif_path) as validate_img:
-                    validate_img.verify()
 
                 progress_bar.progress(100)
                 status_text.text("Complete!")
