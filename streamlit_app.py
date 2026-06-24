@@ -134,10 +134,10 @@ if st.button("Generate Timelapse GIF"):
                     date_format="YYYY-MM-dd HH:mm",
                     add_progress_bar=False,
                     mp4=False,
-                    overlay_data=estados_brasil,
-                    overlay_color="#FF0000",
-                    overlay_width=1,
-                    overlay_opacity=0.8,
+                    #overlay_data=estados_brasil,
+                    #overlay_color="#FF0000",
+                    #overlay_width=1,
+                    #overlay_opacity=0.8,
                 )
 
                 progress_bar.progress(100)
