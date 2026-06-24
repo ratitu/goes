@@ -132,7 +132,7 @@ if st.button("Generate Timelapse GIF"):
                     date_format="YYYY-MM-dd HH:mm",
                     add_progress_bar=False,
                     mp4=False,
-                    overlay_data="/projects/ee-pigee/assets/estados_brasil",
+                    overlay_data="projects/ee-pigee/assets/estados_brasil",
                     overlay_color="#FF0000",
                     overlay_width=1,
                     overlay_opacity=0.8,
