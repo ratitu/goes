@@ -121,7 +121,7 @@ if st.button("Generate Timelapse GIF"):
                 progress_bar.progress(25)
 
                 estados_brasil = ee.FeatureCollection(
-                    "projects/ee-pigee/assets/estados_brasil"
+                    "projects/ee-passeionamatamapas/assets/RMC"
                 )
 
                 timelapse_result = geemap.goes_fire_timelapse(
