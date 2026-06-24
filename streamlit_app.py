@@ -4,6 +4,28 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
+from PIL import Image
+
+import geemap.timelapse
+_add_overlay = geemap.timelapse.add_overlay
+
+def _patched_add_overlay(collection, data, color, width, opacity, region=None):
+    fc = data if isinstance(data, ee.FeatureCollection) else ee.FeatureCollection(data)
+    crs = collection.first().projection()
+    overlay = (
+        ee.Image()
+        .byte()
+        .setDefaultProjection(crs)
+        .paint(fc, 1, width)
+        .visualize(palette=geemap.coreutils.check_color(color), opacity=opacity)
+    )
+    return collection.map(
+        lambda img: img.blend(overlay).set(
+            "system:time_start", img.get("system:time_start")
+        )
+    )
+
+geemap.timelapse.add_overlay = _patched_add_overlay
 
 st.set_page_config(layout="wide")
 
@@ -120,6 +142,9 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
 
+                with open("br_states.json") as f:
+                    estados_fc = ee.FeatureCollection(f.read())
+
                 timelapse_result = geemap.goes_fire_timelapse(
                     roi=region,
                     out_gif=output_gif_path,
@@ -132,7 +157,17 @@ if st.button("Generate Timelapse GIF"):
                     date_format="YYYY-MM-dd HH:mm",
                     add_progress_bar=False,
                     mp4=False,
+                    overlay_data=estados_fc,
+                    overlay_color="#FF0000",
+                    overlay_width=1,
+                    overlay_opacity=0.8,
                 )
+
+                if not os.path.exists(output_gif_path):
+                    raise RuntimeError("GIF download failed. Check server logs.")
+
+                with Image.open(output_gif_path) as validate_img:
+                    validate_img.verify()
 
                 progress_bar.progress(100)
                 status_text.text("Complete!")
