@@ -230,7 +230,7 @@ if "generated_gif_path" in st.session_state and os.path.exists(
 ):
     st.divider()
     st.subheader("Generated Timelapse GIF")
-    st.image(st.session_state["generated_gif_path"], use_container_width=False)
+    st.image(st.session_state["generated_gif_path"], width="content")
 
     filename = f"goes_fire_{st.session_state.get('start_date_str', 'output')}.gif"
     with open(st.session_state["generated_gif_path"], "rb") as f:
