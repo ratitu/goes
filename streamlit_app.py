@@ -4,6 +4,8 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
+import io
+import contextlib
 from PIL import Image
 
 import geemap.timelapse
@@ -145,26 +147,30 @@ if st.button("Generate Timelapse GIF"):
                 with open("br_states.json") as f:
                     estados_fc = ee.FeatureCollection(f.read())
 
-                timelapse_result = geemap.goes_fire_timelapse(
-                    roi=region,
-                    out_gif=output_gif_path,
-                    start_date=start_date_str,
-                    end_date=end_date_str,
-                    data=goes_data,
-                    scan=scan,
-                    dimensions=dimensions,
-                    framesPerSecond=frames_per_second,
-                    date_format="YYYY-MM-dd HH:mm",
-                    add_progress_bar=False,
-                    mp4=False,
-                    overlay_data=estados_fc,
-                    overlay_color="#FF0000",
-                    overlay_width=1,
-                    overlay_opacity=0.8,
-                )
+                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+                    timelapse_result = geemap.goes_fire_timelapse(
+                        roi=region,
+                        out_gif=output_gif_path,
+                        start_date=start_date_str,
+                        end_date=end_date_str,
+                        data=goes_data,
+                        scan=scan,
+                        dimensions=dimensions,
+                        framesPerSecond=frames_per_second,
+                        date_format="YYYY-MM-dd HH:mm",
+                        add_progress_bar=False,
+                        mp4=False,
+                        overlay_data=estados_fc,
+                        overlay_color="#FF0000",
+                        overlay_width=1,
+                        overlay_opacity=0.8,
+                    )
+                    geemap_output = buf.getvalue()
 
                 if not os.path.exists(output_gif_path):
-                    raise RuntimeError("GIF download failed. Check server logs.")
+                    raise RuntimeError(
+                        f"GIF download failed: {geemap_output}"
+                    )
 
                 with Image.open(output_gif_path) as validate_img:
                     validate_img.verify()
