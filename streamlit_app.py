@@ -4,30 +4,8 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
-import io
-import contextlib
-from PIL import Image
-
-import geemap.timelapse
-_add_overlay = geemap.timelapse.add_overlay
-
-def _patched_add_overlay(collection, data, color, width, opacity, region=None):
-    fc = data if isinstance(data, ee.FeatureCollection) else ee.FeatureCollection(data)
-    crs = collection.first().projection()
-    overlay = (
-        ee.Image()
-        .byte()
-        .setDefaultProjection(crs)
-        .paint(fc, 1, width)
-        .visualize(palette=geemap.coreutils.check_color(color), opacity=opacity)
-    )
-    return collection.map(
-        lambda img: img.blend(overlay).set(
-            "system:time_start", img.get("system:time_start")
-        )
-    )
-
-geemap.timelapse.add_overlay = _patched_add_overlay
+import json
+from PIL import Image, ImageDraw
 
 st.set_page_config(layout="wide")
 
@@ -57,6 +35,57 @@ def get_ee_initialized():
 
 def get_goes_data(start_d: date) -> str:
     return "GOES-16" if start_d < GOES_19_START else "GOES-19"
+
+
+def draw_states_on_gif(gif_path, region_coords, dimensions):
+    min_lon, min_lat, max_lon, max_lat = region_coords
+    lon_range = max_lon - min_lon
+    lat_range = max_lat - min_lat
+
+    with open("br_states.json") as f:
+        geojson = json.load(f)
+
+    img = Image.open(gif_path)
+    frames = []
+    durations = []
+
+    try:
+        while True:
+            frame = img.copy().convert("RGB")
+            draw = ImageDraw.Draw(frame)
+
+            for feature in geojson["features"]:
+                geom = feature["geometry"]
+                rings = []
+                if geom["type"] == "MultiPolygon":
+                    for polygon in geom["coordinates"]:
+                        rings.extend(polygon)
+                elif geom["type"] == "Polygon":
+                    rings = geom["coordinates"]
+
+                for ring in rings:
+                    coords = []
+                    for lon, lat in ring:
+                        px = (lon - min_lon) / lon_range * dimensions
+                        py = (max_lat - lat) / lat_range * dimensions
+                        coords.append((px, py))
+                    if len(coords) > 2:
+                        draw.line(coords, fill=(255, 0, 0), width=1)
+
+            frames.append(frame)
+            durations.append(img.info.get("duration", 100))
+            img.seek(img.tell() + 1)
+    except EOFError:
+        pass
+
+    if frames:
+        frames[0].save(
+            gif_path,
+            save_all=True,
+            append_images=frames[1:],
+            loop=0,
+            duration=durations,
+        )
 
 
 st.title("GOES Fire Timelapse App")
@@ -144,33 +173,32 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
 
-                with open("br_states.json") as f:
-                    estados_fc = ee.FeatureCollection(f.read())
-
-                with io.StringIO() as buf, contextlib.redirect_stdout(buf):
-                    timelapse_result = geemap.goes_fire_timelapse(
-                        roi=region,
-                        out_gif=output_gif_path,
-                        start_date=start_date_str,
-                        end_date=end_date_str,
-                        data=goes_data,
-                        scan=scan,
-                        dimensions=dimensions,
-                        framesPerSecond=frames_per_second,
-                        date_format="YYYY-MM-dd HH:mm",
-                        add_progress_bar=False,
-                        mp4=False,
-                        overlay_data=estados_fc,
-                        overlay_color="#FF0000",
-                        overlay_width=1,
-                        overlay_opacity=0.8,
-                    )
-                    geemap_output = buf.getvalue()
+                timelapse_result = geemap.goes_fire_timelapse(
+                    roi=region,
+                    out_gif=output_gif_path,
+                    start_date=start_date_str,
+                    end_date=end_date_str,
+                    data=goes_data,
+                    scan=scan,
+                    dimensions=dimensions,
+                    framesPerSecond=frames_per_second,
+                    date_format="YYYY-MM-dd HH:mm",
+                    add_progress_bar=False,
+                    mp4=False,
+                )
 
                 if not os.path.exists(output_gif_path):
-                    raise RuntimeError(
-                        f"GIF download failed: {geemap_output}"
-                    )
+                    raise RuntimeError("GIF download failed. Check server logs.")
+
+                with Image.open(output_gif_path) as validate_img:
+                    validate_img.verify()
+
+                progress_bar.progress(75)
+                status_text.text("Drawing state boundaries...")
+
+                draw_states_on_gif(
+                    output_gif_path, region_coords, dimensions
+                )
 
                 with Image.open(output_gif_path) as validate_img:
                     validate_img.verify()
