@@ -120,6 +120,7 @@ if st.button("Generate Timelapse GIF"):
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
                 fc = ee.FeatureCollection('projects/ee-passeionamatamapas/assets/br_estados')
+                col=geemap.goes_timeseries(start_date=start_date_str, end_date=end_date_str, data=goes_data, scan=scan, region=region)
 
                 timelapse_result = geemap.goes_fire_timelapse(
                     roi=region,
@@ -131,7 +132,8 @@ if st.button("Generate Timelapse GIF"):
                     dimensions=dimensions,
                     framesPerSecond=frames_per_second,
                     date_format="YYYY-MM-dd HH:mm",
-                    crs="EPSG:3857",
+                    #crs="EPSG:3857",
+                    crs=col.first().projection(),
                     overlay_data=fc,
                     overlay_color='#FFFFFF',
                     overlay_width=1,
