@@ -4,8 +4,6 @@ import geemap
 from datetime import date, datetime, time, timedelta
 import tempfile
 import os
-import json
-from PIL import Image, ImageDraw
 
 st.set_page_config(layout="wide")
 
@@ -35,57 +33,6 @@ def get_ee_initialized():
 
 def get_goes_data(start_d: date) -> str:
     return "GOES-16" if start_d < GOES_19_START else "GOES-19"
-
-
-def draw_states_on_gif(gif_path, region_coords, dimensions):
-    min_lon, min_lat, max_lon, max_lat = region_coords
-    lon_range = max_lon - min_lon
-    lat_range = max_lat - min_lat
-
-    with open("br_states.json") as f:
-        geojson = json.load(f)
-
-    img = Image.open(gif_path)
-    frames = []
-    durations = []
-
-    try:
-        while True:
-            frame = img.copy().convert("RGB")
-            draw = ImageDraw.Draw(frame)
-
-            for feature in geojson["features"]:
-                geom = feature["geometry"]
-                rings = []
-                if geom["type"] == "MultiPolygon":
-                    for polygon in geom["coordinates"]:
-                        rings.extend(polygon)
-                elif geom["type"] == "Polygon":
-                    rings = geom["coordinates"]
-
-                for ring in rings:
-                    coords = []
-                    for lon, lat in ring:
-                        px = (lon - min_lon) / lon_range * dimensions
-                        py = (max_lat - lat) / lat_range * dimensions
-                        coords.append((px, py))
-                    if len(coords) > 2:
-                        draw.line(coords, fill=(255, 0, 0), width=1)
-
-            frames.append(frame)
-            durations.append(img.info.get("duration", 100))
-            img.seek(img.tell() + 1)
-    except EOFError:
-        pass
-
-    if frames:
-        frames[0].save(
-            gif_path,
-            save_all=True,
-            append_images=frames[1:],
-            loop=0,
-            duration=durations,
-        )
 
 
 st.title("GOES Fire Timelapse App")
@@ -187,22 +134,6 @@ if st.button("Generate Timelapse GIF"):
                     mp4=False,
                 )
 
-                if not os.path.exists(output_gif_path):
-                    raise RuntimeError("GIF download failed. Check server logs.")
-
-                with Image.open(output_gif_path) as validate_img:
-                    validate_img.verify()
-
-                progress_bar.progress(75)
-                status_text.text("Drawing state boundaries...")
-
-                draw_states_on_gif(
-                    output_gif_path, region_coords, dimensions
-                )
-
-                with Image.open(output_gif_path) as validate_img:
-                    validate_img.verify()
-
                 progress_bar.progress(100)
                 status_text.text("Complete!")
 
@@ -230,7 +161,7 @@ if "generated_gif_path" in st.session_state and os.path.exists(
 ):
     st.divider()
     st.subheader("Generated Timelapse GIF")
-    st.image(st.session_state["generated_gif_path"], width="content")
+    st.image(st.session_state["generated_gif_path"], use_container_width=False)
 
     filename = f"goes_fire_{st.session_state.get('start_date_str', 'output')}.gif"
     with open(st.session_state["generated_gif_path"], "rb") as f:
