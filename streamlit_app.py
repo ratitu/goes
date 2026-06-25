@@ -5,6 +5,27 @@ from datetime import date, datetime, time, timedelta
 import tempfile
 import os
 
+import geemap.timelapse
+_add_overlay = geemap.timelapse.add_overlay
+
+def _patched_add_overlay(collection, data, color, width, opacity, region=None):
+    fc = data if isinstance(data, ee.FeatureCollection) else ee.FeatureCollection(data)
+    crs = collection.first().projection()
+    overlay = (
+        ee.Image()
+        .byte()
+        .setDefaultProjection(crs)
+        .paint(fc, 1, width)
+        .visualize(palette=geemap.coreutils.check_color(color), opacity=opacity)
+    )
+    return collection.map(
+        lambda img: img.blend(overlay).set(
+            "system:time_start", img.get("system:time_start")
+        )
+    )
+
+geemap.timelapse.add_overlay = _patched_add_overlay
+
 st.set_page_config(layout="wide")
 
 GOES_16_START = date(2017, 12, 18)
@@ -119,6 +140,7 @@ if st.button("Generate Timelapse GIF"):
             try:
                 status_text.text("Processing satellite imagery...")
                 progress_bar.progress(25)
+                fc = ee.FeatureCollection('projects/ee-passeionamatamapas/assets/br_estados')
 
                 timelapse_result = geemap.goes_fire_timelapse(
                     roi=region,
@@ -130,7 +152,8 @@ if st.button("Generate Timelapse GIF"):
                     dimensions=dimensions,
                     framesPerSecond=frames_per_second,
                     date_format="YYYY-MM-dd HH:mm",
-                    add_progress_bar=False,
+                    overlay_data=fc,
+                    add_progress_bar=True,
                     mp4=False,
                 )
 
@@ -161,7 +184,7 @@ if "generated_gif_path" in st.session_state and os.path.exists(
 ):
     st.divider()
     st.subheader("Generated Timelapse GIF")
-    st.image(st.session_state["generated_gif_path"], use_container_width=False)
+    st.image(st.session_state["generated_gif_path"], width="content")
 
     filename = f"goes_fire_{st.session_state.get('start_date_str', 'output')}.gif"
     with open(st.session_state["generated_gif_path"], "rb") as f:
