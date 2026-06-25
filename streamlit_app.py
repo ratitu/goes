@@ -131,6 +131,7 @@ if st.button("Generate Timelapse GIF"):
                     dimensions=dimensions,
                     framesPerSecond=frames_per_second,
                     date_format="YYYY-MM-dd HH:mm",
+                    crs="EPSG:3857",
                     overlay_data=fc,
                     overlay_color='#FFFFFF',
                     overlay_width=1,
