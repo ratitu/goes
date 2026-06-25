@@ -138,7 +138,7 @@ if st.button("Generate Timelapse GIF"):
                     overlay_color='#FFFFFF',
                     overlay_width=1,
                     overlay_opacity=1.0,
-                    add_progress_bar=False,
+                    add_progress_bar=True,
                     mp4=False,
                 )
 
