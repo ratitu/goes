@@ -6,6 +6,8 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from PIL import Image
+
 st.set_page_config(layout="wide")
 
 EE_PROJECT = "ee-passeionamatamapas"
@@ -85,6 +87,136 @@ def generate_timelapse(
         add_progress_bar=True,
         mp4=False,
     )
+
+
+def merge_gifs_pillow(gif_paths: list[Path], output_path: Path, fps: int) -> None:
+    frames: list[Image.Image] = []
+    for path in gif_paths:
+        img = Image.open(path)
+        try:
+            while True:
+                frames.append(img.copy())
+                img.seek(img.tell() + 1)
+        except EOFError:
+            pass
+
+    if not frames:
+        return
+
+    duration = int(1000 / fps)
+    frames[0].save(
+        output_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=duration,
+        loop=0,
+        optimize=True,
+    )
+
+
+def generate_timelapse_chunk(
+    output_path: Path,
+    start_dt: datetime,
+    end_dt: datetime,
+    goes_data: str,
+    scan: str,
+    region: ee.Geometry,
+    dimensions: int,
+    fps: int,
+) -> bool:
+    start_str = start_dt.strftime("%Y-%m-%dT%H:%M")
+    end_str = end_dt.strftime("%Y-%m-%dT%H:%M")
+
+    fc = get_br_estados_fc()
+    geemap.goes_fire_timelapse(
+        roi=region,
+        out_gif=str(output_path),
+        start_date=start_str,
+        end_date=end_str,
+        data=goes_data,
+        scan=scan,
+        dimensions=dimensions,
+        framesPerSecond=fps,
+        date_format="YYYY-MM-dd HH:mm",
+        crs="EPSG:3857",
+        overlay_data=fc,
+        overlay_color="#ECF71B",
+        overlay_width=1,
+        overlay_opacity=1.0,
+        add_progress_bar=True,
+        mp4=False,
+    )
+    return output_path.exists()
+
+
+def split_and_generate(
+    tmp_dir: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    goes_data: str,
+    scan: str,
+    region: ee.Geometry,
+    dimensions: int,
+    fps: int,
+    output_path: Path,
+    status_text: object,
+    progress_bar: object,
+    base_progress: float = 25.0,
+    progress_range: float = 70.0,
+    depth: int = 0,
+    max_depth: int = 3,
+) -> list[Path]:
+    mid_dt = start_dt + (end_dt - start_dt) / 2
+    segments: list[Path] = []
+
+    halves = [
+        (start_dt, mid_dt, "left"),
+        (mid_dt, end_dt, "right"),
+    ]
+
+    for i, (h_start, h_end, label) in enumerate(halves):
+        chunk_idx = depth * 2 + i
+        total_at_depth = 2 ** (depth + 1)
+        pct = base_progress + (chunk_idx / total_at_depth) * progress_range
+        progress_bar.progress(min(int(pct), 99))
+        status_text.text(
+            f"Generating segment {chunk_idx + 1}/{total_at_depth} "
+            f"({h_start.strftime('%H:%M')}–{h_end.strftime('%H:%M')})..."
+        )
+
+        chunk_path = Path(tmp_dir) / f"chunk_{depth}_{label}.gif"
+        success = generate_timelapse_chunk(
+            chunk_path, h_start, h_end, goes_data, scan, region, dimensions, fps
+        )
+
+        if success:
+            segments.append(chunk_path)
+        elif depth < max_depth:
+            sub_segments = split_and_generate(
+                tmp_dir,
+                h_start,
+                h_end,
+                goes_data,
+                scan,
+                region,
+                dimensions,
+                fps,
+                output_path,
+                status_text,
+                progress_bar,
+                base_progress=pct,
+                progress_range=progress_range / 2,
+                depth=depth + 1,
+                max_depth=max_depth,
+            )
+            segments.extend(sub_segments)
+
+    if depth == 0 and segments:
+        status_text.text("Merging segments...")
+        segments.sort(key=lambda p: p.name)
+        merge_gifs_pillow(segments, output_path, fps)
+
+    return segments
 
 
 # --- App UI ---
@@ -171,22 +303,25 @@ if st.button("Generate Timelapse GIF"):
                 with TemporaryDirectory() as tmp_dir:
                     output_gif_path = Path(tmp_dir) / "timelapse.gif"
 
-                    generate_timelapse(
-                        output_path=output_gif_path,
-                        start_date_str=start_date_str,
-                        end_date_str=end_date_str,
+                    split_and_generate(
+                        tmp_dir=tmp_dir,
+                        start_dt=start_dt,
+                        end_dt=end_dt,
                         goes_data=goes_data,
                         scan=scan,
                         region=region,
                         dimensions=dimensions,
                         fps=frames_per_second,
+                        output_path=output_gif_path,
+                        status_text=status_text,
+                        progress_bar=progress_bar,
                     )
 
                     if not output_gif_path.exists():
                         st.error(
-                            "Timelapse generation failed. The server did not "
-                            "return a GIF — likely a timeout. Try a shorter "
-                            "time range or smaller dimensions."
+                            "All segments failed. Earth Engine may be "
+                            "overloaded — try a shorter time range or "
+                            "smaller dimensions."
                         )
                         st.stop()
 
