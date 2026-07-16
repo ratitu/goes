@@ -209,7 +209,7 @@ if st.button("Generate Timelapse GIF"):
 if "generated_gif_bytes" in st.session_state:
     st.divider()
     st.subheader("Generated Timelapse GIF")
-    st.image(st.session_state["generated_gif_bytes"], use_container_width=False)
+    st.image(st.session_state["generated_gif_bytes"], width="content")
 
     filename = f"goes_fire_{st.session_state.get('start_date_str', 'output')}.gif"
     st.download_button(
