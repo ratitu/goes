@@ -182,6 +182,14 @@ if st.button("Generate Timelapse GIF"):
                         fps=frames_per_second,
                     )
 
+                    if not output_gif_path.exists():
+                        st.error(
+                            "Timelapse generation failed. The server did not "
+                            "return a GIF — likely a timeout. Try a shorter "
+                            "time range or smaller dimensions."
+                        )
+                        st.stop()
+
                     # Read GIF bytes into session state so it survives temp dir cleanup
                     st.session_state["generated_gif_bytes"] = (
                         output_gif_path.read_bytes()
