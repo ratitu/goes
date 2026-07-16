@@ -29,6 +29,7 @@ REGION_PRESETS: dict[str, RegionBBox] = {
     "Continental US": RegionBBox(-130.0, 24.0, -65.0, 50.0),
     "Full Disk": RegionBBox(-180.0, -90.0, 180.0, 90.0),
 }
+REGION_PRESET_NAMES = tuple(REGION_PRESETS)
 
 
 def init_ee() -> None:
@@ -45,6 +46,11 @@ def get_ee_initialized() -> bool:
     return True
 
 
+@st.cache_resource
+def get_br_estados_fc() -> ee.FeatureCollection:
+    return ee.FeatureCollection(f"projects/{EE_PROJECT}/assets/br_estados")
+
+
 def select_goes_satellite(start_d: date) -> str:
     return "GOES-16" if start_d < GOES_19_START else "GOES-19"
 
@@ -59,7 +65,7 @@ def generate_timelapse(
     dimensions: int,
     fps: int,
 ) -> None:
-    fc = ee.FeatureCollection(f"projects/{EE_PROJECT}/assets/br_estados")
+    fc = get_br_estados_fc()
 
     geemap.goes_fire_timelapse(
         roi=region,
@@ -81,36 +87,19 @@ def generate_timelapse(
     )
 
 
-def validate_inputs(
-    start_d: date, end_d: date, start_t: time, end_t: time
-) -> str | None:
-    start_dt = datetime.combine(start_d, start_t)
-    end_dt = datetime.combine(end_d, end_t)
-    if start_dt >= end_dt:
-        return "End time must be after start time."
-    if start_d < GOES_16_START:
-        return (
-            f"GOES-16 data available from {GOES_16_START.strftime('%B %d, %Y')} "
-            "onwards."
-        )
-    return None
-
-
 # --- App UI ---
 
 st.title("GOES Fire Timelapse App")
 get_ee_initialized()
 
-if "last_settings" not in st.session_state:
-    st.session_state.last_settings = {}
-if "pending_gif_path" not in st.session_state:
-    st.session_state.pending_gif_path = None
+st.session_state.setdefault("last_settings", {})
+st.session_state.setdefault("pending_gif_path", None)
 
 col1, col2 = st.columns([1, 3])
 
 with col1:
     st.subheader("1. Select Region")
-    preset = st.selectbox("Region Preset", list(REGION_PRESETS.keys()), index=0)
+    preset = st.selectbox("Region Preset", REGION_PRESET_NAMES, index=0)
     region = REGION_PRESETS[preset].to_ee()
 
 with col2:
@@ -145,12 +134,16 @@ with col_scan:
     scan = st.selectbox("Scan Type", ["full_disk", "regional"], index=0)
 
 if st.button("Generate Timelapse GIF"):
-    error = validate_inputs(start_d, end_d, start_t, end_t)
-    if error:
-        st.error(error)
+    start_dt = datetime.combine(start_d, start_t)
+    end_dt = datetime.combine(end_d, end_t)
+    if start_dt >= end_dt:
+        st.error("End time must be after start time.")
+    elif start_d < GOES_16_START:
+        st.error(
+            f"GOES-16 data available from {GOES_16_START.strftime('%B %d, %Y')} "
+            "onwards."
+        )
     else:
-        start_dt = datetime.combine(start_d, start_t)
-        end_dt = datetime.combine(end_d, end_t)
         start_date_str = start_dt.strftime("%Y-%m-%dT%H:%M")
         end_date_str = end_dt.strftime("%Y-%m-%dT%H:%M")
 
@@ -190,7 +183,9 @@ if st.button("Generate Timelapse GIF"):
                     )
 
                     # Read GIF bytes into session state so it survives temp dir cleanup
-                    st.session_state["generated_gif_bytes"] = output_gif_path.read_bytes()
+                    st.session_state["generated_gif_bytes"] = (
+                        output_gif_path.read_bytes()
+                    )
 
                 progress_bar.progress(100)
                 status_text.text("Complete!")
