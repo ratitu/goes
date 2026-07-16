@@ -79,7 +79,7 @@ def generate_timelapse(
         date_format="YYYY-MM-dd HH:mm",
         crs="EPSG:3857",
         overlay_data=fc,
-        overlay_color="#FFFFFF",
+        overlay_color="#ECF71B",
         overlay_width=1,
         overlay_opacity=1.0,
         add_progress_bar=True,
