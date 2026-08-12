@@ -479,6 +479,7 @@ REGION_PRESETS: dict[str, RegionBBox] = {
     "South America": RegionBBox(-85.0, -56.0, -34.0, 13.0),
     "Continental US": RegionBBox(-130.0, 24.0, -65.0, 50.0),
     "Full Disk": RegionBBox(-180.0, -90.0, 180.0, 90.0),
+    "São Paulo": RegionBBox(-53.11011, -25.3585, -44.1593, -19.7670),
 }
 REGION_PRESET_NAMES = tuple(REGION_PRESETS)
 
