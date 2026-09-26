@@ -1,12 +1,16 @@
 import streamlit as st
 import ee
+import folium
 import geemap
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from folium.plugins import Draw
 from PIL import Image
+from streamlit_folium import st_folium
 
 st.set_page_config(
     layout="wide",
@@ -481,7 +485,119 @@ REGION_PRESETS: dict[str, RegionBBox] = {
     "Full Disk": RegionBBox(-180.0, -90.0, 180.0, 90.0),
     "São Paulo": RegionBBox(-53.11011, -25.3585, -44.1593, -19.7670),
 }
-REGION_PRESET_NAMES = tuple(REGION_PRESETS)
+REGION_PRESET_NAMES = tuple(list(REGION_PRESETS.keys()) + ["Draw your region"])
+
+ROI_FALLBACK = REGION_PRESETS["South America"]
+_HYBRID_TILE_URL = "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+
+
+def _iter_positions(coordinates: object) -> Iterator[Sequence[float]]:
+    """Yield each [lon, lat] position from arbitrarily nested GeoJSON coordinates."""
+    if isinstance(coordinates, (list, tuple)):
+        if coordinates and all(isinstance(c, (int, float)) for c in coordinates):
+            yield coordinates
+            return
+        for child in coordinates:
+            yield from _iter_positions(child)
+
+
+def _lon_lat_bounds(geometry: dict) -> RegionBBox | None:
+    """Reduce any GeoJSON geometry to its bounding box; None if it has no coordinates.
+
+    The ROI is only ever consumed as an ``ee.Geometry.BBox``, so that bounding box
+    is the entire contract between the drawn shape and the renderer.
+    """
+    positions = list(_iter_positions(geometry.get("coordinates")))
+    if not positions:
+        return None
+    lons = [p[0] for p in positions]
+    lats = [p[1] for p in positions]
+    return RegionBBox(min(lons), min(lats), max(lons), max(lats))
+
+
+def _drawn_bbox(drawings: object) -> RegionBBox | None:
+    """Extract a bbox from st_folium's ``all_drawings``.
+
+    The frontend sends ``window.drawnItems.toGeoJSON().features`` -- a bare list,
+    not a FeatureCollection -- so both shapes are accepted here.
+    """
+    if isinstance(drawings, dict):
+        drawings = drawings.get("features")
+    if not isinstance(drawings, (list, tuple)) or not drawings:
+        return None
+    for feature in reversed(drawings):
+        geometry = feature.get("geometry") if isinstance(feature, dict) else None
+        if isinstance(geometry, dict):
+            bbox = _lon_lat_bounds(geometry)
+            if bbox is not None:
+                return bbox
+    return None
+
+
+def _drawings_cleared(drawings: object) -> bool:
+    """True only when the frontend reports an emptied feature set.
+
+    ``None`` means the component has not reported a draw event yet, which is a
+    different state from the user removing their rectangle. Only the latter may
+    invalidate a persisted ROI.
+    """
+    if isinstance(drawings, dict):
+        drawings = drawings.get("features")
+    return isinstance(drawings, (list, tuple)) and not drawings
+
+
+def render_roi_drawer() -> tuple[ee.Geometry, RegionBBox]:
+    """Render the ROI drawer and return the region it currently defines.
+
+    Falls back to South America until a rectangle is drawn, then persists the
+    result so it survives reruns that did not originate from the map. Deleting
+    the rectangle drops the persisted ROI rather than restoring it.
+    """
+    stored = st.session_state.get("roi_bbox")
+    bbox = stored if isinstance(stored, RegionBBox) else ROI_FALLBACK
+
+    fmap = folium.Map(
+        location=[(bbox.south + bbox.north) / 2, (bbox.west + bbox.east) / 2],
+        zoom_start=3,
+    )
+    folium.TileLayer(_HYBRID_TILE_URL, name="HYBRID", attr="Google").add_to(fmap)
+
+    # Rectangle-only with no edit/remove: the bbox is derived from the shape, so
+    # allowing hand edits would let the drawn ROI and the render window disagree.
+    Draw(
+        draw_options={
+            "rectangle": {
+                "shapeOptions": {"color": "#ECF71B", "fillOpacity": 0.0},
+            },
+            "polygon": False,
+            "polyline": False,
+            "circle": False,
+            "circlemarker": False,
+            "marker": False,
+        },
+        edit_options={"edit": False, "remove": False},
+    ).add_to(fmap)
+    if isinstance(stored, RegionBBox):
+        folium.Rectangle(
+            [[bbox.south, bbox.west], [bbox.north, bbox.east]],
+            color="#ECF71B",
+            fill_opacity=0.0,
+            dash_array="6 4",
+        ).add_to(fmap)
+
+    result = st_folium(
+        fmap, height=400, key="roi_drawer", returned_objects=["all_drawings"]
+    )
+    drawings = result.get("all_drawings") if result else None
+    if _drawings_cleared(drawings):
+        st.session_state.pop("roi_bbox", None)
+        bbox = ROI_FALLBACK
+    else:
+        drawn = _drawn_bbox(drawings)
+        if drawn is not None:
+            st.session_state["roi_bbox"] = drawn
+            bbox = drawn
+    return bbox.to_ee(), bbox
 
 
 def init_ee() -> None:
@@ -702,13 +818,17 @@ with st.container(border=True):
             label_visibility="collapsed",
             key="preset_widget",
         )
-        region = REGION_PRESETS[preset].to_ee()
-        bbox = REGION_PRESETS[preset]
-        st.markdown(
-            f"<div class='tel-bbox'>BBOX <b>{bbox.west},{bbox.south}</b> "
-            f"&rarr; <b>{bbox.east},{bbox.north}</b></div>",
-            unsafe_allow_html=True,
-        )
+
+        if preset == "Draw your region":
+            region, bbox = render_roi_drawer()
+        else:
+            bbox = REGION_PRESETS[preset]
+            region = bbox.to_ee()
+            st.markdown(
+                f"<div class='tel-bbox'>BBOX <b>{bbox.west},{bbox.south}</b> "
+                f"&rarr; <b>{bbox.east},{bbox.north}</b></div>",
+                unsafe_allow_html=True,
+            )
 
     with col_time:
         st.markdown("<p class='field-label'>Timeline · UTC</p>", unsafe_allow_html=True)
